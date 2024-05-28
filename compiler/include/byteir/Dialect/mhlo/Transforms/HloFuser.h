@@ -34,8 +34,8 @@ constexpr StringRef getByteIRCatFusionAttrName() {
   return "__byteir_cat_fusion__";
 }
 
-constexpr StringRef getByteIRReduceFusionAttrName() {
-  return "__byteir_reduce_fusion__";
+constexpr StringRef getByteIRReduceWindowFusionAttrName() {
+  return "__byteir_reduce_window_fusion__";
 }
 
 constexpr StringRef getByteIRElementwiseFusionAttrName() {
@@ -58,7 +58,7 @@ constexpr StringRef getByteIRHloAggressiveFusionAttrName() {
   return "__byteir_hlo_aggressive_fusion__";
 }
 
-// fuse ReduceWindow with Pad and/or Constant
+// fuse ReduceWindow with Pad
 void populateFuseReduceWindowPatterns(RewritePatternSet &patterns);
 
 // fuse ConvForward patterns
@@ -78,7 +78,7 @@ void populateIOConvertBatchNormPattern(RewritePatternSet &patterns);
 void populateTrivialFusionPattern(RewritePatternSet &patterns,
                                   llvm::StringMap<StringRef> &lut_name);
 
-std::unique_ptr<OperationPass<func::FuncOp>> createReduceFusionPass();
+std::unique_ptr<OperationPass<func::FuncOp>> createReduceWindowFusionPass();
 
 std::unique_ptr<OperationPass<func::FuncOp>> createConvBackwardFusionPass();
 
@@ -93,6 +93,8 @@ std::unique_ptr<OperationPass<func::FuncOp>>
 createElementFusionPass(bool clusterSingleElemwiseOp = false,
                         bool disableElementwiseFuse = false);
 
+std::unique_ptr<OperationPass<func::FuncOp>> createConcatSliceFusionPass();
+
 std::unique_ptr<OperationPass<func::FuncOp>> createMatmulEpilogueFusionPass();
 
 std::unique_ptr<OperationPass<func::FuncOp>> createIOConvertFusionPass();
@@ -100,7 +102,8 @@ std::unique_ptr<OperationPass<func::FuncOp>> createIOConvertFusionPass();
 // TODO add more target or list of op in arg
 std::unique_ptr<OperationPass<func::FuncOp>> createTrivialFusionPass();
 
-std::unique_ptr<OperationPass<func::FuncOp>> createHloAggressiveFusionPass();
+std::unique_ptr<OperationPass<func::FuncOp>>
+createHloAggressiveFusionPass(bool disableFusion = false);
 
 std::unique_ptr<OperationPass<func::FuncOp>> createReductionFusionPass();
 
