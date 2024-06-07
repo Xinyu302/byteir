@@ -67,6 +67,13 @@ getMappingForallConfig(scf::ForallOp forallOp) {
   if (!isMappedToGPUBlocks(forallOp))
     return std::nullopt;
 
+  if (func::FuncOp funcOp = forallOp->getParentOfType<func::FuncOp>()) {
+    auto blockSizeOptional = getGemmBlockSize(funcOp);
+    if (blockSizeOptional.has_value()) {
+      return MappingForallConfig{SmallVector(blockSizeOptional.value())};
+    }
+  }
+
   SmallVector<int64_t> blockDims{1, 1, 1};
   auto &&block = forallOp.getRegion().front();
   for (auto &&nestedForall : block.getOps<scf::ForallOp>()) {
