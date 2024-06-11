@@ -16,9 +16,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "byteir/Pipelines/GPU/GemmCodegen.h"
-#include "byteir/Conversion/GemmCodeGen/Utils/GPUCodeGenUtils.h"
 #include "byteir/Conversion/ToGPU/ToGPU.h"
 #include "byteir/Conversion/ToLLVM/ToLLVM.h"
+#include "byteir/Dialect/GPU/Transforms/Utils.h"
 #include "byteir/Dialect/Linalg/TransformOps/LinalgExtTransformOps.h"
 #include "byteir/Dialect/Linalg/Transforms/LinalgGPUPassCommon.h"
 #include "byteir/Dialect/Linalg/Transforms/LinalgPrefetch.h"
