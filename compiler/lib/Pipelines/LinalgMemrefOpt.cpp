@@ -27,6 +27,57 @@
 using namespace mlir;
 
 namespace {
+void addGemmOptPasses(OpPassManager &pm) {
+  // createTileGemmTransform.
+  // -linalg-prefetch="alloc-op-type=alloc"
+  // -cse -canonicalize
+  // -gpu-distributed-to-warp -remove-single-iteration-loop
+  // --gpu-tensorcore-vectorization
+  // -fold-memref-alias-ops -cse -optimize-vector-transfer
+  // -gpu-generalize-named-ops // linalg.copy => linalg.generic // add tag
+  // --gpu-distributed-shared-memory-copy -canonicalize -cse
+  // -fold-memref-alias-ops
+  // --gpuvector-to-gpu -canonicalize -cse
+  {
+    auto gemmAnchor = getByteIRMatmulEpilogueFusionAttrName().str();
+    {
+      OpPassManager anchoredPM(func::FuncOp::getOperationName());
+      anchoredPM.addPass(createLinalgPromotionPass());
+      pm.addNestedPass<func::FuncOp>(
+          createAnchoredPipelinePass(gemmAnchor, anchoredPM));
+    }
+    GPUTileGemmOptions options;
+    options.funcAnchor = gemmAnchor;
+    // createPrepareLinalgPrefetchTransform(pm, options);
+    // pm.addPass(createTransformDialectInterpreter(true));
+    {
+      OpPassManager anchoredPM(func::FuncOp::getOperationName());
+
+      anchoredPM.addPass(createGPUPipelinePass());
+      anchoredPM.addPass(createCSEPass());
+      anchoredPM.addPass(createCanonicalizerPass());
+      anchoredPM.addPass(createGPUDistributeToWarpPass());
+      anchoredPM.addPass(createRemoveTrivialLoopsPass());
+      anchoredPM.addPass(createGPUTensorCoreVectorizationPass());
+      anchoredPM.addPass(memref::createFoldMemRefAliasOpsPass());
+      anchoredPM.addPass(createCanonicalizerPass());
+      anchoredPM.addPass(createCSEPass());
+      anchoredPM.addPass(createOptimizeVectorTransferPass());
+      anchoredPM.addPass(createGPUDistributeSharedMemoryCopyPass());
+      anchoredPM.addPass(memref::createFoldMemRefAliasOpsPass());
+      anchoredPM.addPass(createCanonicalizerPass());
+      anchoredPM.addPass(createCSEPass());
+      anchoredPM.addPass(createGPUVectorToGPUPass());
+      anchoredPM.addPass(createCanonicalizerPass());
+      anchoredPM.addPass(createCSEPass());
+      anchoredPM.addPass(memref::createFoldMemRefAliasOpsPass());
+      anchoredPM.addPass(createGPUPackSharedMemoryAllocPass());
+      pm.addNestedPass<func::FuncOp>(
+          createAnchoredPipelinePass(gemmAnchor, anchoredPM));
+    }
+  }
+}
+
 void addGenericLinalgMemrefOptPasses(OpPassManager &pm) {
   // TODO: change getByteIRElementwiseFusionAttrName to GPU specific codegen
   // anchor tag
