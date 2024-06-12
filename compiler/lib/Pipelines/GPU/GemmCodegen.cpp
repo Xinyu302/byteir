@@ -213,52 +213,10 @@ void createGPUTileGemmTransformImpl(OpPassManager &pm,
   pm.addPass(createGenericTransformInsertionPass(config));
 }
 
-void createPrepareLinalgPrefetchTransformImpl(OpPassManager &pm,
-                                              const std::string &anchor,
-                                              const std::string &prefix) {
-  TransformInsertionConfig config;
-  config.funcAnchor = anchor;
-  config.matchPrefix = prefix;
-
-  config.opFilter = [=](Operation *op) {
-    if (llvm::dyn_cast<linalg::CopyOp>(op)) {
-      if (op->hasAttr(getLinalgLoadMatrixBAttrName()) ||
-          op->hasAttr(getLinalgLoadMatrixAAttrName())) {
-        return true;
-      }
-      return false;
-    }
-    return false;
-  };
-
-  config.transformBuilder = [=](ImplicitLocOpBuilder &b, Operation *op,
-                                Value pdlV) {
-    func::FuncOp funcOp = op->getParentOfType<func::FuncOp>();
-    int64_t stages = getGemmPipelineDepth(funcOp).value();
-
-    Value stageValue = b.create<transform::ParamConstantOp>(
-        /* type */ pdl::AttributeType::get(b.getContext()),
-        /* value */ b.getI64IntegerAttr(stages));
-    b.create<transform::AnnotateOp>(pdlV, getLinalgCopyAsyncAttrName(),
-                                    Value());
-    b.create<transform::AnnotateOp>(pdlV, getPrefetchAttrName(), Value());
-    b.create<transform::AnnotateOp>(pdlV, getPrefetchStagesAttrName(),
-                                    stageValue);
-  };
-
-  pm.addPass(createGenericTransformInsertionPass(config));
-}
-
 } // namespace
 
 void mlir::createGPUTileGemmTransform(OpPassManager &pm,
                                       const GPUTileGemmOptions &options) {
   invokeOpPassPipelineBuilder(createGPUTileGemmTransformImpl, pm,
-                              options.funcAnchor, options.annotatePrefix);
-}
-
-void mlir::createPrepareLinalgPrefetchTransform(
-    OpPassManager &pm, const GPUTileGemmOptions &options) {
-  invokeOpPassPipelineBuilder(createPrepareLinalgPrefetchTransformImpl, pm,
                               options.funcAnchor, options.annotatePrefix);
 }
