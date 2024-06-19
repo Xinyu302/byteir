@@ -20,7 +20,8 @@
 #include "byteir/Conversion/ToLLVM/ToLLVM.h"
 #include "byteir/Dialect/GPU/Transforms/Utils.h"
 #include "byteir/Dialect/Linalg/TransformOps/LinalgExtTransformOps.h"
-#include "byteir/Dialect/Linalg/Transforms/LinalgGPUPassCommon.h"
+// #include "byteir/Dialect/Linalg/Transforms/LinalgGPUPassCommon.h"
+#include "byteir/Dialect/GPU/Transforms/Utils.h"
 #include "byteir/Dialect/Linalg/Transforms/LinalgPrefetch.h"
 #include "byteir/Dialect/Transform/IR/TransformExtOps.h"
 #include "byteir/Dialect/Transform/Transforms/TransformInsertion.h"
@@ -41,6 +42,16 @@ using namespace mlir;
 namespace {
 
 /// copy from ReductionCodegen.cpp. Should make it to a util.
+
+constexpr StringRef getLinalgToGPUAttrName() { return "__byteir_to_gpu__"; }
+
+constexpr StringRef getLinalgMMALevelAttrName() {
+  return "__byteir_mma_level__";
+}
+
+constexpr StringRef getMMAPatternAttrName() { return "__byteir_mma__"; }
+
+constexpr StringRef getLinalgTargetAttrName() { return "__byteir_target__"; }
 
 struct ProducerSelector {
   uint64_t operandNumber;
@@ -147,7 +158,7 @@ void createGPUTileGemmTransformImpl(OpPassManager &pm,
   config.funcAnchor = anchor;
   config.matchPrefix = prefix;
   config.opFilter = [=](Operation *op) {
-    if (auto linalgOp = llvm::dyn_cast_or_null<linalg::LinalgOp>(op)) {
+    if (auto linalgOp = llvm::dyn_cast_or_null<linalg::MatmulOp>(op)) {
       func::FuncOp funcOp = op->getParentOfType<func::FuncOp>();
       SmallVector<int64_t, 3> tileSizeConfig = getGemmTileSize(funcOp).value();
 
@@ -219,4 +230,77 @@ void mlir::createGPUTileGemmTransform(OpPassManager &pm,
                                       const GPUTileGemmOptions &options) {
   invokeOpPassPipelineBuilder(createGPUTileGemmTransformImpl, pm,
                               options.funcAnchor, options.annotatePrefix);
+}
+
+namespace {
+
+void createGPUAddGemmCodegenLoweringConfigTransformImpl(
+    OpPassManager &pm, const std::string &anchor, const std::string &prefix,
+    ArrayRef<int64_t> tileSizeConfig, ArrayRef<int64_t> workgroupSize,
+    int64_t stages) {
+
+  SmallVector<int64_t> tileSizeConfigVec{tileSizeConfig};
+  SmallVector<int64_t> workgroupSizeVec{workgroupSize};
+
+  TransformInsertionConfig config;
+  config.funcAnchor = anchor;
+  config.matchPrefix = prefix;
+
+  config.opFilter = [=](Operation *op) {
+    if (llvm::isa<linalg::MatmulOp>(op)) {
+      // TODO: check if the matmul op is already annotated
+      // TODO: Add different lowering config for different matmul op size
+      return true;
+    }
+    return false;
+  };
+
+  config.transformBuilder = [=](ImplicitLocOpBuilder &b, Operation *op,
+                                Value pdlV) {
+    // auto linalgOp = llvm::cast<linalg::LinalgOp>(op);
+    auto tileSizeConfigAttrs = b.getAttr<ArrayAttr>(llvm::to_vector(
+        llvm::map_range(tileSizeConfigVec, [&](int64_t i) -> Attribute {
+          return b.getI64IntegerAttr(i);
+        })));
+    auto workgroupSizeAttrs = b.getAttr<ArrayAttr>(llvm::to_vector(
+        llvm::map_range(workgroupSizeVec, [&](int64_t i) -> Attribute {
+          return b.getI64IntegerAttr(i);
+        })));
+    auto stagesAttr = b.getI64IntegerAttr(stages);
+
+    auto func = b.create<transform::GetParentOp>(
+        pdlV.getType(), pdlV,
+        /* isolated_from_above */ true,
+        /* allow_empty_results */ false,
+        /* op_name */ b.getStringAttr(func::FuncOp::getOperationName()),
+        /* deduplicate */ false,
+        /* nth_parent */ 1);
+
+    Value tileSizeConfigValue = b.create<transform::ParamConstantOp>(
+        /* type */ pdl::AttributeType::get(b.getContext()),
+        /* value */ tileSizeConfigAttrs);
+    Value workgroupSizeValue = b.create<transform::ParamConstantOp>(
+        /* type */ pdl::AttributeType::get(b.getContext()),
+        /* value */ workgroupSizeAttrs);
+    Value stagesValue = b.create<transform::ParamConstantOp>(
+        /* type */ pdl::AttributeType::get(b.getContext()),
+        /* value */ stagesAttr);
+
+    b.create<transform::AnnotateOp>(func, getGemmTileConfigAttrName(),
+                                    tileSizeConfigValue);
+    b.create<transform::AnnotateOp>(func, getGemmBlockSizeAttrName(),
+                                    workgroupSizeValue);
+    b.create<transform::AnnotateOp>(func, getGemmPipelineDepthAttrName(),
+                                    stagesValue);
+  };
+  pm.addPass(createGenericTransformInsertionPass(config));
+}
+} // namespace
+
+void mlir::createGPUAddGemmCodegenLoweringConfigTransform(
+    OpPassManager &pm, const GPUGemmCodegenConfigOptions &options) {
+  invokeOpPassPipelineBuilder(
+      createGPUAddGemmCodegenLoweringConfigTransformImpl, pm,
+      options.funcAnchor, options.annotatePrefix, options.tileSizeConfig,
+      options.workgroupSize, options.stages);
 }

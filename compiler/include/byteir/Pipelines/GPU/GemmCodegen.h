@@ -23,6 +23,29 @@
 #include "mlir/Pass/PassRegistry.h"
 
 namespace mlir {
+
+struct GPUGemmCodegenConfigOptions
+    : public PassPipelineOptions<GPUGemmCodegenConfigOptions> {
+  Option<std::string> funcAnchor{
+      *this, "func-anchor",
+      llvm::cl::desc(
+          "An optional Unit attribute anchoring on target functions."),
+      llvm::cl::init("")};
+  Option<std::string> annotatePrefix{
+      *this, "annotate-prefix",
+      llvm::cl::desc("An optional annotate prefix attribute on target ops."),
+      llvm::cl::init("__byteir_gpu_tile_gemm")};
+  ListOption<int64_t> tileSizeConfig{
+      *this, "tile-size-config",
+      llvm::cl::desc("An optional tile size config for tile matmul op.")};
+  ListOption<int64_t> workgroupSize{
+      *this, "workgroup-size",
+      llvm::cl::desc("An optional workgroup size config for tile matmul op.")};
+  Option<int64_t> stages{
+      *this, "stages", llvm::cl::desc("An optional stages for tile matmul op."),
+      llvm::cl::init(3)};
+};
+
 struct GPUTileGemmOptions : public PassPipelineOptions<GPUTileGemmOptions> {
   Option<std::string> funcAnchor{
       *this, "func-anchor",
@@ -38,11 +61,18 @@ struct GPUTileGemmOptions : public PassPipelineOptions<GPUTileGemmOptions> {
 void createGPUTileGemmTransform(OpPassManager &pm,
                                 const GPUTileGemmOptions &options);
 
+void createGPUAddGemmCodegenLoweringConfigTransform(
+    OpPassManager &pm, const GPUGemmCodegenConfigOptions &options);
+
 inline void registerGPUGemmCodegenPipelines() {
   PassPipelineRegistration<GPUTileGemmOptions>(
       "insert-gpu-tile-gemm-transform",
       "Insert transformation IR to tile linalg matmul op",
       createGPUTileGemmTransform);
+  PassPipelineRegistration<GPUGemmCodegenConfigOptions>(
+      "insert-gpu-gemm-codegen-transform",
+      "Insert transformation IR to tile linalg matmul op",
+      createGPUAddGemmCodegenLoweringConfigTransform);
 }
 
 } // namespace mlir
