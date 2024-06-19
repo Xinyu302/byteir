@@ -86,8 +86,8 @@ public:
       }
     }
 
-    auto srcMemSpace = src.getType().cast<MemRefType>().getMemorySpace();
-    auto dstMemSpace = target.getType().cast<MemRefType>().getMemorySpace();
+    auto srcMemSpace = cast<MemRefType>(src.getType()).getMemorySpace();
+    auto dstMemSpace = cast<MemRefType>(target.getType()).getMemorySpace();
     if (srcMemSpace && dstMemSpace && srcMemSpace != dstMemSpace) {
       return failure();
     }
@@ -242,6 +242,7 @@ public:
       }
       rewriter.replaceOp(srcAllocOp, {reshapeTarget});
       rewriter.eraseOp(copyOp);
+      return success();
     }
 
     return failure();

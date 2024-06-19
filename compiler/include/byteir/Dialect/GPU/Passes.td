@@ -34,6 +34,17 @@ def ShmAllocaToWorkgroupArg : Pass<"shm-alloca-to-workgroup-arg", "gpu::GPUModul
 }
 
 //===----------------------------------------------------------------------===//
+// GPUBlockSwizzle
+//===----------------------------------------------------------------------===//
+def GPUBlockSwizzle : Pass<"gpu-block-swizzle", "func::FuncOp"> {
+  let summary = "Swizzle GPU block to improve performance";
+  let constructor = "mlir::createGPUBlockSwizzlePass()";
+  let options = [
+    Option<"swizzleLogTile", "swizzle-log-tile", "int64_t", /*default=*/"0", "the log of gpu block swizzle tile">,
+  ];
+}
+
+//===----------------------------------------------------------------------===//
 // GPUDistributeToWarp
 //===----------------------------------------------------------------------===//
 def GPUDistributeToWarp: Pass<"gpu-distributed-to-warp", "func::FuncOp"> {
@@ -67,5 +78,13 @@ def GPUTensorCoreVectorization : Pass<"gpu-tensorcore-vectorization", "func::Fun
   ];
 }
 
+
+//===----------------------------------------------------------------------===//
+// GPUPackSharedMemoryAlloc
+//===----------------------------------------------------------------------===//
+def GPUPackSharedMemoryAlloc : Pass<"gpu-pack-shared-memory-alloc", "func::FuncOp"> {
+  let summary = "Analysis shared memory reuse and pack it into i8 alloc.";
+  let constructor = "mlir::createGPUPackSharedMemoryAllocPass()";
+}
 
 #endif // BYTEIR_DIALECT_GPU_PASSES
