@@ -58,14 +58,12 @@ using namespace mlir;
 
 namespace {
 
-constexpr StringRef allocMarker[3] = {"__byteir_alloca_matrix_a__",
-                                      "__byteir_alloca_matrix_b__",
-                                      "__byteir_alloca_accumulator__"};
-constexpr StringRef copyMarker[3] = {
-    "__byteir_load_matrix_a__",
-    "__byteir_load_matrix_b__",
-    "__byteir_store_matrix_c__",
-};
+constexpr StringRef allocMarker[3] = {getAllocSharedMemoryAMarker(),
+                                      getAllocSharedMemoryBMarker(),
+                                      getAllocSharedMemoryAccMarker()};
+constexpr StringRef copyMarker[3] = {getCopyToSharedMemoryAMarker(),
+                                     getCopyToSharedMemoryBMarker(),
+                                     getCopyFromSharedMemoryAccMarker()};
 
 namespace MatmulOperands {
 constexpr static int64_t A = 0;
