@@ -20,8 +20,6 @@
 #include "byteir/Conversion/ToLLVM/ToLLVM.h"
 #include "byteir/Dialect/GPU/Transforms/Utils.h"
 #include "byteir/Dialect/Linalg/TransformOps/LinalgExtTransformOps.h"
-// #include "byteir/Dialect/Linalg/Transforms/LinalgGPUPassCommon.h"
-#include "byteir/Dialect/GPU/Transforms/Utils.h"
 #include "byteir/Dialect/Linalg/Transforms/LinalgPrefetch.h"
 #include "byteir/Dialect/Transform/IR/TransformExtOps.h"
 #include "byteir/Dialect/Transform/Transforms/TransformInsertion.h"
@@ -31,6 +29,8 @@
 #include "mlir/Dialect/GPU/IR/GPUDialect.h"
 #include "mlir/Dialect/Linalg/IR/Linalg.h"
 #include "mlir/Dialect/Linalg/TransformOps/LinalgTransformOps.h"
+#include "mlir/Dialect/MemRef/TransformOps/MemRefTransformOps.h"
+#include "mlir/Dialect/NVGPU/TransformOps/NVGPUTransformOps.h"
 #include "mlir/Dialect/Tensor/IR/Tensor.h"
 #include "mlir/IR/BuiltinOps.h"
 #include "llvm/ADT/SmallSet.h"
@@ -227,7 +227,7 @@ void createGPUTileGemmTransformImpl(OpPassManager &pm,
 } // namespace
 
 void mlir::createGPUTileGemmTransform(OpPassManager &pm,
-                                      const GPUTileGemmOptions &options) {
+                                      const GPUGemmGeneralOptions &options) {
   invokeOpPassPipelineBuilder(createGPUTileGemmTransformImpl, pm,
                               options.funcAnchor, options.annotatePrefix);
 }
@@ -303,4 +303,74 @@ void mlir::createGPUAddGemmCodegenLoweringConfigTransform(
       createGPUAddGemmCodegenLoweringConfigTransformImpl, pm,
       options.funcAnchor, options.annotatePrefix, options.tileSizeConfig,
       options.workgroupSize, options.stages);
+}
+
+namespace {
+void createGPUPipeliningTransformImpl(OpPassManager &pm,
+                                      const std::string &anchor,
+                                      const std::string &prefix) {
+
+  TransformInsertionConfig config;
+  config.funcAnchor = anchor;
+  config.matchPrefix = prefix;
+
+  config.opFilter = [=](Operation *op) {
+    if (auto forallOp = llvm::dyn_cast_or_null<scf::ForallOp>(op)) {
+      return isMappedToGPUBlocks(forallOp);
+    }
+    return false;
+  };
+
+  config.transformBuilder = [=](ImplicitLocOpBuilder &b, Operation *op,
+                                Value pdlV) {
+    func::FuncOp funcOp = op->getParentOfType<func::FuncOp>();
+    auto pipelineStageOptional = getGemmPipelineDepth(funcOp);
+    if (!pipelineStageOptional) {
+      return;
+    }
+    int pipelineStage = *pipelineStageOptional;
+    auto anyType = transform::AnyOpType::get(b.getContext());
+
+    auto memrefAllocType = transform::OperationType::get(
+        b.getContext(), memref::AllocOp::getOperationName());
+    auto memrefAllocMatrixLHS = b.create<transform::MatchOp>(
+        memrefAllocType, pdlV,
+        b.getStrArrayAttr({memref::AllocOp::getOperationName()}),
+        /*matchInterfaceEnum=*/transform::MatchInterfaceEnumAttr(),
+        /*opAttrs=*/
+        b.getDictionaryAttr({NamedAttribute(
+            b.getStringAttr(getAllocSharedMemoryAMarker()), b.getUnitAttr())}),
+        /*filterResultType=*/TypeAttr(),
+        /*filterOperandTYpes=*/ArrayAttr());
+    b.create<transform::MemRefMultiBufferOp>(
+        anyType, memrefAllocMatrixLHS, pipelineStage, /* skip_analysis */ true);
+
+    auto memrefAllocMatrixRHS = b.create<transform::MatchOp>(
+        memrefAllocType, pdlV,
+        b.getStrArrayAttr({memref::AllocOp::getOperationName()}),
+        /*matchInterfaceEnum=*/transform::MatchInterfaceEnumAttr(),
+        /*opAttrs=*/
+        b.getDictionaryAttr({NamedAttribute(
+            b.getStringAttr(getAllocSharedMemoryBMarker()), b.getUnitAttr())}),
+        /*filterResultType=*/TypeAttr(),
+        /*filterOperandTYpes=*/ArrayAttr());
+    b.create<transform::MemRefMultiBufferOp>(
+        anyType, memrefAllocMatrixRHS, pipelineStage, /* skip_analysis */ true);
+
+    // match scf::for op
+    auto scfForOpType = transform::OperationType::get(
+        b.getContext(), scf::ForOp::getOperationName());
+    auto scfForOp = b.create<transform::MatchOp>(
+        scfForOpType, pdlV, scf::ForOp::getOperationName());
+    b.create<transform::PipelineSharedMemoryCopiesOp>(anyType, scfForOp,
+                                                      pipelineStage);
+  };
+  pm.addPass(createGenericTransformInsertionPass(config));
+}
+} // namespace
+
+void mlir::createGPUPipeliningTransform(OpPassManager &pm,
+                                        const GPUGemmGeneralOptions &options) {
+  invokeOpPassPipelineBuilder(createGPUPipeliningTransformImpl, pm,
+                              options.funcAnchor, options.annotatePrefix);
 }

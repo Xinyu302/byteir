@@ -46,7 +46,8 @@ struct GPUGemmCodegenConfigOptions
       llvm::cl::init(3)};
 };
 
-struct GPUTileGemmOptions : public PassPipelineOptions<GPUTileGemmOptions> {
+struct GPUGemmGeneralOptions
+    : public PassPipelineOptions<GPUGemmGeneralOptions> {
   Option<std::string> funcAnchor{
       *this, "func-anchor",
       llvm::cl::desc(
@@ -59,13 +60,16 @@ struct GPUTileGemmOptions : public PassPipelineOptions<GPUTileGemmOptions> {
 };
 
 void createGPUTileGemmTransform(OpPassManager &pm,
-                                const GPUTileGemmOptions &options);
+                                const GPUGemmGeneralOptions &options);
 
 void createGPUAddGemmCodegenLoweringConfigTransform(
     OpPassManager &pm, const GPUGemmCodegenConfigOptions &options);
 
+void createGPUPipeliningTransform(OpPassManager &pm,
+                                  const GPUGemmGeneralOptions &options);
+
 inline void registerGPUGemmCodegenPipelines() {
-  PassPipelineRegistration<GPUTileGemmOptions>(
+  PassPipelineRegistration<GPUGemmGeneralOptions>(
       "insert-gpu-tile-gemm-transform",
       "Insert transformation IR to tile linalg matmul op",
       createGPUTileGemmTransform);
@@ -73,6 +77,10 @@ inline void registerGPUGemmCodegenPipelines() {
       "insert-gpu-gemm-codegen-transform",
       "Insert transformation IR to tile linalg matmul op",
       createGPUAddGemmCodegenLoweringConfigTransform);
+  PassPipelineRegistration<GPUGemmGeneralOptions>(
+      "insert-gpu-pipelining-transform",
+      "Insert transformation IR to tile linalg matmul op",
+      createGPUPipeliningTransform);
 }
 
 } // namespace mlir
