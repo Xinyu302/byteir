@@ -127,7 +127,6 @@ void createReductionGPUOptPipelineImpl(OpPassManager &pm) {
 }
 
 void createGemmGPUOptPipelineImpl(OpPassManager &pm) {
-  // TODO(YangXinyu): Get workgroup size from config!
   GPUMappingForallOptions options;
   options.funcAnchor = getByteIRMatmulEpilogueFusionAttrName().str();
   options.annotatePrefix = "__byteir_gpu_gemm_tile";
