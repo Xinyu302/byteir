@@ -97,8 +97,8 @@ allocateWorkgroupMemory(OpBuilder &builder, memref::SubViewOp subview,
       shape, subview.getType().getElementType(), MemRefLayoutAttrInterface{},
       gpu::AddressSpaceAttr::get(builder.getContext(),
                                  gpu::GPUDialect::getWorkgroupAddressSpace()));
-  memref::AllocaOp buffer =
-      builder.create<memref::AllocaOp>(forallOp.getLoc(), type);
+  memref::AllocOp buffer =
+      builder.create<memref::AllocOp>(forallOp.getLoc(), type);
   setMarker(buffer, allocMarker[OPERAND]);
   // To fix fill op. The FillOp operand `subview` should be rewrited to
   // `alloca`
@@ -141,6 +141,7 @@ LogicalResult copyWorkgroupMemoryToGlobalMemory(OpBuilder &b, Value src,
 
   // copyWorkgroupMemoryToGlobalMemory after gemm compute ends.
   b.setInsertionPointAfter(forOps[0]);
+  b.create<gpu::BarrierOp>(src.getLoc());
   Operation *copyOp = b.create<linalg::CopyOp>(src.getLoc(), src, dst);
   setLinalgTransformationMarker(copyOp,
                                 getCopyRelatedToWorkgroupMemoryMarker());
