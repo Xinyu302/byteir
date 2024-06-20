@@ -102,25 +102,26 @@ struct GPUPipeliningPass : public GPUPipeliningBase<GPUPipeliningPass> {
 
   void runOnOperation() override {
     func::FuncOp funcOp = getOperation();
+    stages = 3;
     // step 1: collect all the alloc operations and do multi-buffering
-    SmallVector<memref::AllocaOp> allocas;
+    SmallVector<memref::AllocOp> allocas;
     // Collect all the alloc operations.
-    funcOp.walk([&](memref::AllocaOp allocaOp) {
+    funcOp.walk([&](memref::AllocOp AllocOp) {
       if (nvgpu::NVGPUDialect::hasSharedMemoryAddressSpace(
-              allocaOp.getType()) &&
-          hasMarker(allocaOp, {getAllocSharedMemoryAMarker(),
+              AllocOp.getType()) &&
+          hasMarker(AllocOp, {getAllocSharedMemoryAMarker(),
                                getAllocSharedMemoryBMarker()})) {
-        allocas.push_back(allocaOp);
+        allocas.push_back(AllocOp);
       }
     });
     assert(allocas.size() == 2 && "Only support 2 allocas for now");
     // Apply multi-buffering to all of them.
-    for (memref::AllocaOp allocaOp : allocas) {
-      if (failed(memref::multiBufferExt(allocaOp, (unsigned int)stages))) {
+    for (memref::AllocOp AllocOp : allocas) {
+      if (failed(memref::multiBufferExt(AllocOp, (unsigned int)stages, true))) {
         // Error out and stop if any buffer cannot be multi buffered, as
         // future software pipelining transformations will assume this
         // happened.
-        allocaOp.emitOpError("cannot be multi-buffered");
+        AllocOp.emitOpError("cannot be multi-buffered");
         return signalPassFailure();
       }
     }
