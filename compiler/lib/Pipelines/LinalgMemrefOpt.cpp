@@ -84,8 +84,6 @@ void addGemmOptPasses(OpPassManager &pm) {
       options.funcAnchor = gemmAnchor;
       createGPUPipeliningTransform(pm, options);
       pm.addPass(createTransformDialectInterpreter(true));
-      pm.addPass(createCSEPass());
-      pm.addPass(createCanonicalizerPass());
       pm.addPass(memref::createFoldMemRefAliasOpsPass());
     }
 
