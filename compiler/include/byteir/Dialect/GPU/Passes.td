@@ -116,4 +116,15 @@ def GPUPipelining : Pass<"gpu-pipelining", "func::FuncOp"> {
     "NVVM::NVVMDialect",
   ];
 }
+
+//===----------------------------------------------------------------------===//
+// GPUVectorToGPU
+//===----------------------------------------------------------------------===//
+def GPUVectorToGPU : Pass<"gpu-vector-to-gpu", "func::FuncOp"> {
+  let summary = "Transform vector.contract to gpu.mma.sync.";
+  let constructor = "mlir::createGPUVectorToGPUPass()";
+  let dependentDialects = [
+    "nvgpu::NVGPUDialect",
+  ];
+}
 #endif // BYTEIR_DIALECT_GPU_PASSES

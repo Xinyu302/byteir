@@ -68,6 +68,10 @@ namespace NVVM {
 class NVVMDialect;
 } // namespace NVVM
 
+namespace nvgpu {
+class NVGPUDialect;
+} // namespace nvgpu
+
 namespace transform {
 class TransformDialect;
 } // namespace transform
