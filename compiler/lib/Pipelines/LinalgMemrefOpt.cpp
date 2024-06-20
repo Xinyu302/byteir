@@ -21,6 +21,8 @@
 #include "byteir/Dialect/Byre/ByreDialect.h"
 #include "byteir/Dialect/GPU/Passes.h"
 #include "byteir/Dialect/Linalg/Passes.h"
+#include "byteir/Dialect/Transform/Transforms/TransformDialectInterpreter.h"
+#include "byteir/Dialect/Transform/Transforms/TransformInsertion.h"
 #include "byteir/Dialect/mhlo/Transforms/HloFuser.h"
 #include "byteir/Pipelines/Common/Utils.h"
 #include "byteir/Pipelines/GPU/GemmCodegen.h"
@@ -51,19 +53,12 @@ void addGemmOptPasses(OpPassManager &pm) {
     {
       OpPassManager anchoredPM(func::FuncOp::getOperationName());
       anchoredPM.addPass(createLinalgPromotionPass());
-      pm.addNestedPass<func::FuncOp>(
-          createAnchoredPipelinePass(gemmAnchor, anchoredPM));
-    }
-    // GPUTileGemmOptions options;
-    // options.funcAnchor = gemmAnchor;
-    // createPrepareLinalgPrefetchTransform(pm, options);
-    // pm.addPass(createTransformDialectInterpreter(true));
-    {
-      OpPassManager anchoredPM(func::FuncOp::getOperationName());
-      anchoredPM.addPass(createLinalgPromotionPass());
-      anchoredPM.addPass(createGPUPipeliningPass());
+      anchoredPM.addPass(createCanonicalizerPass());
       anchoredPM.addPass(createCSEPass());
       anchoredPM.addPass(createCanonicalizerPass());
+      // anchoredPM.addPass(createGPUPipeliningPass());
+      // anchoredPM.addPass(createCSEPass());
+      // anchoredPM.addPass(createCanonicalizerPass());
       anchoredPM.addPass(createGPUDistributeToWarpPass());
       anchoredPM.addPass(createRemoveTrivialLoopsPass());
       anchoredPM.addPass(createGPUTensorCoreVectorizationPass());
@@ -75,11 +70,29 @@ void addGemmOptPasses(OpPassManager &pm) {
       anchoredPM.addPass(memref::createFoldMemRefAliasOpsPass());
       anchoredPM.addPass(createCanonicalizerPass());
       anchoredPM.addPass(createCSEPass());
-      // anchoredPM.addPass(createGPUVectorToGPUPass());
-      // anchoredPM.addPass(createCanonicalizerPass());
-      // anchoredPM.addPass(createCSEPass());
-      // anchoredPM.addPass(memref::createFoldMemRefAliasOpsPass());
-      // anchoredPM.addPass(createGPUPackSharedMemoryAllocPass());
+      // tranfer_read -> nvgpu.async_copy
+      anchoredPM.addPass(createGPUVectorToGPUPass());
+      anchoredPM.addPass(createCanonicalizerPass());
+      anchoredPM.addPass(createCSEPass());
+      pm.addNestedPass<func::FuncOp>(
+          createAnchoredPipelinePass(gemmAnchor, anchoredPM));
+    }
+
+    // do multi-buffer and pipelining
+    {
+      GPUGemmGeneralOptions options;
+      options.funcAnchor = gemmAnchor;
+      createGPUPipeliningTransform(pm, options);
+      pm.addPass(createTransformDialectInterpreter(true));
+      pm.addPass(createCSEPass());
+      pm.addPass(createCanonicalizerPass());
+      pm.addPass(memref::createFoldMemRefAliasOpsPass());
+    }
+
+    // anchoredPM.addPass(createGPUPipeliningPass());
+    {
+      OpPassManager anchoredPM(func::FuncOp::getOperationName());
+      anchoredPM.addPass(createGPUPackSharedMemoryAllocPass());
       pm.addNestedPass<func::FuncOp>(
           createAnchoredPipelinePass(gemmAnchor, anchoredPM));
     }
@@ -100,6 +113,7 @@ void addGenericLinalgMemrefOptPasses(OpPassManager &pm) {
 void createLinalgMemrefOptPipelineImpl(OpPassManager &pm,
                                        const std::string & /* target */) {
   addGenericLinalgMemrefOptPasses(pm);
+  addGemmOptPasses(pm);
 }
 } // namespace
 

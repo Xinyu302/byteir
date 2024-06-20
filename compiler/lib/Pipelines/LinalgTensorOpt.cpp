@@ -241,9 +241,9 @@ void addGenericLinalgPasses(OpPassManager &pm) {
       gemmConfigOptions.workgroupSize = workgroupSize;
       gemmConfigOptions.stages = stages;
       createGPUAddGemmCodegenLoweringConfigTransform(pm, gemmConfigOptions);
-      pm.addPass(createTransformDialectInterpreter(false));
+      pm.addPass(createTransformDialectInterpreter(true));
 
-      GPUTileGemmOptions options;
+      GPUGemmGeneralOptions options;
       options.funcAnchor = gemmAnchor;
       createGPUTileGemmTransform(pm, options);
       pm.addPass(createTransformDialectInterpreter(true));
