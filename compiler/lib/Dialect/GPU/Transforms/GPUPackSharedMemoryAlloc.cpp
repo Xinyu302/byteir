@@ -210,7 +210,6 @@ void packSharedMemoryAlloc(scf::ForallOp forallOp) {
       allocs.push_back(allocOp);
     }
   });
-  llvm::errs() << "Found " << allocs.size() << " shared memory allocations\n";
   // First sink the alloc as low as possible in the CFG.
   sinkOpsInCFG(allocs, dominators);
   SmallVector<AliasGroup> aliasGroups;

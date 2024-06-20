@@ -126,10 +126,43 @@ void createReductionGPUOptPipelineImpl(OpPassManager &pm) {
   pm.addPass(createGpuKernelOutliningPass());
 }
 
+void createGemmGPUOptPipelineImpl(OpPassManager &pm) {
+  // TODO(YangXinyu): Get workgroup size from config!
+  GPUMappingForallOptions options;
+  options.funcAnchor = getByteIRMatmulEpilogueFusionAttrName().str();
+  options.annotatePrefix = "__byteir_gpu_gemm_tile";
+  createGPUMappingForallTransform(pm, options);
+  pm.addPass(createTransformDialectInterpreter(true));
+  pm.addPass(createCSEPass());
+  pm.addPass(createCanonicalizerPass());
+  pm.addPass(createGpuLauchSinkIndexComputationsPass());
+
+  {
+    OpPassManager anchoredPM(func::FuncOp::getOperationName());
+
+    anchoredPM.addPass(createPromoteBuffersToStackPass(
+        /*isSmallAlloc =*/[](Value value) {
+          return value.getParentRegion()->getParentOfType<gpu::LaunchOp>();
+        }));
+
+    pm.addNestedPass<func::FuncOp>(createAnchoredPipelinePass(
+        getByteIRMatmulEpilogueFusionAttrName(), anchoredPM));
+  }
+  pm.addPass(createGpuKernelOutliningPass());
+  {
+    OpPassManager anchoredPM(func::FuncOp::getOperationName());
+    // anchoredPM.addPass(createSetSharedMemorySizePass());
+
+    pm.addNestedPass<func::FuncOp>(createAnchoredPipelinePass(
+        getByteIRMatmulEpilogueFusionAttrName(), anchoredPM));
+  }
+}
+
 void createGPUOptPipelineImpl(OpPassManager &pm, const bool &useBarePtrCallConv,
                               const std::string &target) {
   createElementwiseGPUOptPipelineImpl(pm, useBarePtrCallConv, target);
   createReductionGPUOptPipelineImpl(pm);
+  createGemmGPUOptPipelineImpl(pm);
   pm.addPass(createCollectGPUKernelPass("unified", false));
 }
 
