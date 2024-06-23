@@ -127,4 +127,12 @@ def GPUVectorToGPU : Pass<"gpu-vector-to-gpu", "func::FuncOp"> {
     "nvgpu::NVGPUDialect",
   ];
 }
+
+//===----------------------------------------------------------------------===//
+// LegalizeGPULaunch
+//===----------------------------------------------------------------------===//
+def LegalizeGPULaunch : Pass<"legalize-gpu-launch", "func::FuncOp"> {
+  let summary = "Legalize GPU launch ops.";
+  let constructor = "mlir::createLegalizeGPULaunchPass()";
+}
 #endif // BYTEIR_DIALECT_GPU_PASSES

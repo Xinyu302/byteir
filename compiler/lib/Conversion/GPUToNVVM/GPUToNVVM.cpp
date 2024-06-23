@@ -68,9 +68,9 @@ using namespace mlir::NVVM;
 
 namespace {
 
-void ConvertToDynamicSharedMemory(GPUModuleOp moduleOp) {
+static void ConvertToDynamicSharedMemory(GPUModuleOp moduleOp) {
   SymbolTableCollection symbolTableCollection;
-  // Collect all the adressOfOps to static shared memory globals.
+  // Collect all the addressOfOps to static shared memory globals.
   SmallVector<LLVM::AddressOfOp> addressOfOps;
   moduleOp.walk([&](LLVM::AddressOfOp addressOfOp) {
     // Check that the global associated with this addressOfOp has shared memory
@@ -80,17 +80,8 @@ void ConvertToDynamicSharedMemory(GPUModuleOp moduleOp) {
   });
   if (addressOfOps.size() == 0)
     return;
-  OpBuilder builder(moduleOp);
-  builder.setInsertionPoint(&moduleOp.front());
-  auto type =
-      LLVM::LLVMArrayType::get(IntegerType::get(builder.getContext(), 8), 0);
-  LLVM::GlobalOp global = builder.create<LLVM::GlobalOp>(
-      moduleOp.getLoc(), type, /*isConstant=*/false, LLVM::Linkage::External,
-      "__dynamic_shared_memory__", Attribute(),
-      /*alignment=*/16, /*addr_space=*/3);
+
   uint32_t numberOfBytes = 0;
-  // Replace the addressOfOps with correctly offseted pointers to dynamic
-  // shared memory.
   llvm::SmallDenseMap<LLVM::GlobalOp, uint32_t> globalMemoryOffsetMap;
   for (auto addressOfOp : addressOfOps) {
     uint32_t offset = 0;
@@ -107,6 +98,26 @@ void ConvertToDynamicSharedMemory(GPUModuleOp moduleOp) {
       DataLayout dataLayout = DataLayout::closest(addressOfOp);
       numberOfBytes = offset + dataLayout.getTypeSizeInBits(thisarray) / 8;
     }
+  }
+
+  // Check if numberOfBytes is less than 48 * 1024
+  if (numberOfBytes < 48 * 1024) {
+    return;
+  }
+
+  OpBuilder builder(moduleOp);
+  builder.setInsertionPoint(&moduleOp.front());
+  auto type =
+      LLVM::LLVMArrayType::get(IntegerType::get(builder.getContext(), 8), 0);
+  LLVM::GlobalOp global = builder.create<LLVM::GlobalOp>(
+      moduleOp.getLoc(), type, /*isConstant=*/false, LLVM::Linkage::External,
+      "__dynamic_shared_memory__", Attribute(),
+      /*alignment=*/16, /*addr_space=*/3);
+
+  // Replace the addressOfOps with correctly offseted pointers to dynamic
+  // shared memory.
+  for (auto addressOfOp : addressOfOps) {
+    uint32_t offset = globalMemoryOffsetMap[addressOfOp.getGlobal(symbolTableCollection)];
     auto loc = addressOfOp.getLoc();
     builder.setInsertionPoint(addressOfOp);
     LLVM::AddressOfOp globalPtr =
@@ -416,6 +427,7 @@ struct GPUToNVVMExtPass : public GPUToNVVMExtBase<GPUToNVVMExtPass> {
         }
       }
     });
+    ConvertToDynamicSharedMemory(m);
   }
 };
 
