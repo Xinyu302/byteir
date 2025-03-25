@@ -355,17 +355,17 @@ void createGPUPipeliningTransformImpl(OpPassManager &pm,
         anyType, memrefAllocMatrixRHS, pipelineStage, /* skip_analysis */ true);
 
     // fold memref alias for subview of multi-buffers
-    b.create<transform::ApplyPatternsOp>(pdlV, [](OpBuilder &b, Location loc) {
-      b.create<transform::ApplyFoldMemrefAliasOpsPatternsOp>(loc);
-    });
+    // b.create<transform::ApplyPatternsOp>(pdlV, [](OpBuilder &b, Location loc) {
+    //   b.create<transform::ApplyFoldMemrefAliasOpsPatternsOp>(loc);
+    // });
 
-    // match scf::for op
-    auto scfForOpType = transform::OperationType::get(
-        b.getContext(), scf::ForOp::getOperationName());
-    auto scfForOp = b.create<transform::MatchOp>(
-        scfForOpType, pdlV, scf::ForOp::getOperationName());
-    b.create<transform::PipelineSharedMemoryCopiesOp>(anyType, scfForOp,
-                                                      pipelineStage);
+    // // match scf::for op
+    // auto scfForOpType = transform::OperationType::get(
+    //     b.getContext(), scf::ForOp::getOperationName());
+    // auto scfForOp = b.create<transform::MatchOp>(
+    //     scfForOpType, pdlV, scf::ForOp::getOperationName());
+    // b.create<transform::PipelineSharedMemoryCopiesOp>(anyType, scfForOp,
+    //                                                   pipelineStage);
   };
   pm.addPass(createGenericTransformInsertionPass(config));
 }
