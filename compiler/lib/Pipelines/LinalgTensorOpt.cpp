@@ -39,6 +39,23 @@
 using namespace mlir;
 
 namespace {
+std::vector<int64_t> stringToIntVector(const std::string &s) {
+  std::vector<int64_t> result;
+  std::istringstream iss(s);
+  std::string token;
+
+  // 按逗号分割字符串
+  while (std::getline(iss, token, ',')) {
+    // 将每个子串转换为整数，并加入 vector 中
+    int num = std::stoi(token);
+    result.push_back(num);
+  }
+
+  return result;
+}
+
+static int64_t stringToInt(const std::string &s) { return std::stoi(s); }
+
 void addGenericLinalgPasses(OpPassManager &pm) {
   pm.addNestedPass<func::FuncOp>(
       createHloFusionToLinalgPass(getByteIRElementwiseFusionAttrName()));
@@ -237,14 +254,35 @@ void addGenericLinalgPasses(OpPassManager &pm) {
         pm.addNestedPass<func::FuncOp>(
             createAnchoredPipelinePass(gemmAnchor, anchoredPM));
       }
-      SmallVector<int64_t> tileSizeConfig = {128, 128, 32};
-      SmallVector<int64_t> workgroupSize = {64, 2, 1};
-      int64_t stages = 3;
+      const char *env_value1 = std::getenv("GEMM_TILE");
+      SmallVector<int64_t> tileSizeConfig;
+      if (env_value1) {
+        for (auto &tileSize : stringToIntVector(env_value1)) {
+          tileSizeConfig.push_back(tileSize);
+        }
+      } else {
+        tileSizeConfig = {128, 128, 32};
+      }
+
+      SmallVector<int64_t> workgroupSizeConfig;
+      const char *env_value2 = std::getenv("WORKGROUP");
+      if (env_value2) {
+        for (auto &workgroupSize : stringToIntVector(env_value2)) {
+          workgroupSizeConfig.push_back(workgroupSize);
+        }
+      } else {
+        workgroupSizeConfig = {64, 2, 1};
+      }
+      const char *env_value3 = std::getenv("STAGES");
+      int64_t stages = 0;
+      if (env_value3) {
+        stages = stringToInt(env_value3);
+      }
       // Annotate fusion with gemm config
       GPUGemmCodegenConfigOptions gemmConfigOptions;
       gemmConfigOptions.funcAnchor = gemmAnchor;
       gemmConfigOptions.tileSizeConfig = tileSizeConfig;
-      gemmConfigOptions.workgroupSize = workgroupSize;
+      gemmConfigOptions.workgroupSize = workgroupSizeConfig;
       gemmConfigOptions.stages = stages;
       createGPUAddGemmCodegenLoweringConfigTransform(pm, gemmConfigOptions);
       pm.addPass(createTransformDialectInterpreter(true));

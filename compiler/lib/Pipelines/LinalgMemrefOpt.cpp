@@ -38,6 +38,9 @@
 using namespace mlir;
 
 namespace {
+
+static int64_t stringToInt(const std::string &s) { return std::stoi(s); }
+
 void addGemmOptPasses(OpPassManager &pm) {
   {
     auto gemmAnchor = getByteIRMatmulEpilogueFusionAttrName().str();
@@ -50,6 +53,22 @@ void addGemmOptPasses(OpPassManager &pm) {
 
       anchoredPM.addPass(createGPUDistributeToWarpPass());
       anchoredPM.addPass(createRemoveTrivialLoopsPass());
+      pm.addNestedPass<func::FuncOp>(
+          createAnchoredPipelinePass(gemmAnchor, anchoredPM));
+    }
+    char *pipelineDepthStr = std::getenv("STAGES");
+    if (pipelineDepthStr) {
+      GPUGemmGeneralOptions options;
+      options.funcAnchor = gemmAnchor;
+      createGPUPipeliningTransform(pm, options);
+      pm.addPass(createTransformDialectInterpreter(true));
+      pm.addPass(createCanonicalizerPass());
+      pm.addPass(createCSEPass());
+    }
+    {
+      OpPassManager anchoredPM(func::FuncOp::getOperationName());
+      anchoredPM.addPass(createRemoveTrivialLoopsPass());
+
       anchoredPM.addPass(createGPUTensorCoreVectorizationPass());
       anchoredPM.addPass(memref::createFoldMemRefAliasOpsPass());
       anchoredPM.addPass(createCanonicalizerPass());
@@ -74,10 +93,18 @@ void addGemmOptPasses(OpPassManager &pm) {
 
     // do multi-buffer and pipelining
     {
-      GPUGemmGeneralOptions options;
-      options.funcAnchor = gemmAnchor;
-      createGPUPipeliningTransform(pm, options);
-      pm.addPass(createTransformDialectInterpreter(true));
+      pm.addNestedPass<func::FuncOp>(createGPULoopInvariantCodeMotion());
+      char *pipelineDepthStr = std::getenv("STAGES");
+      int pipelineDepth = 0;
+      if (pipelineDepthStr) {
+        pipelineDepth = stringToInt(pipelineDepthStr);
+        GPUPipeliningOptions pipelieningOptions = {};
+        pipelieningOptions.epiloguePeeling = false;
+        pipelieningOptions.depth = pipelineDepth;
+        pipelieningOptions.scheduleIndex =
+            llvm::to_underlying(PipeliningSchedulingStrategy::nvidiaTensorCore);
+        pm.addNestedPass<func::FuncOp>(createGPUPipelining(pipelieningOptions));
+      }
       pm.addPass(memref::createFoldMemRefAliasOpsPass());
     }
 
@@ -87,7 +114,9 @@ void addGemmOptPasses(OpPassManager &pm) {
       anchoredPM.addPass(createGPUPackSharedMemoryAllocPass());
       anchoredPM.addPass(createCanonicalizerPass());
       anchoredPM.addPass(createCSEPass());
-      anchoredPM.addPass(createGPUBlockSwizzlePass(3));
+      const char *swizzle = std::getenv("BLOCK_SWIZZLE");
+      if (swizzle)
+        anchoredPM.addPass(createGPUBlockSwizzlePass(stringToInt(swizzle)));
       pm.addNestedPass<func::FuncOp>(
           createAnchoredPipelinePass(gemmAnchor, anchoredPM));
     }

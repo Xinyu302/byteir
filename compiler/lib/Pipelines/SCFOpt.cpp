@@ -21,6 +21,7 @@
 #include "byteir/Dialect/Linalg/Transforms/LinalgExtToLoops.h"
 #include "byteir/Dialect/SCF/Transforms/FuseNestedForall.h"
 #include "byteir/Dialect/mhlo/Passes.h"
+#include "byteir/Dialect/GPU/Passes.h"
 #include "byteir/Pipelines/Common/Utils.h"
 #include "byteir/Transforms/Passes.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
@@ -41,6 +42,7 @@ void addGenericSCFOptPasses(OpPassManager &pm) {
   // lower affine.apply in case there is some
   pm.addPass(memref::createFoldMemRefAliasOpsPass());
   pm.addPass(createLowerAffinePass());
+  pm.addNestedPass<func::FuncOp>(createOptimizeIntArithmetic());
   pm.addNestedPass<func::FuncOp>(createLoopCoalescingPass());
   pm.addPass(arith::createIntRangeOptimizationsPass());
   // for reduction

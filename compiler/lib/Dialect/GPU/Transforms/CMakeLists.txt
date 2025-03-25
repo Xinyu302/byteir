@@ -9,6 +9,9 @@ add_mlir_dialect_library(ByteIRGPUPasses
   OptimizeVectorTransfer.cpp
   RemoveTrivialLoops.cpp
   ShmAllocaToWorkgroupArg.cpp
+  GPUPipelining.cpp
+  GPULoopInvariantCodeMotion.cpp
+  OptimizeIntArithmetic.cpp
   Utils.cpp
 
   ADDITIONAL_HEADER_DIRS

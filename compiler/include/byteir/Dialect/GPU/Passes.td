@@ -121,4 +121,49 @@ def GPUInputSharedMemorySwizzle: Pass<"gpu-input-shared-memory-swizzle", "func::
   let summary = "Swizzle shared memory for gemm's input to improve performance.";
   let constructor = "mlir::createGPUInputSharedMemorySwizzlePass()";
 }
+
+
+//===----------------------------------------------------------------------===//
+// GPUPipelining
+//===----------------------------------------------------------------------===//
+def GPUPipelining : Pass<"gpu-pipelining", "func::FuncOp"> {
+  let summary = "Pipelining GPU kernel.";
+  // let constructor = "mlir::createGPUPipeliningPass()";
+  let options = [
+    Option<"epiloguePeeling", "epilogue-peeling", "bool",
+            /*default=*/"true",
+           "Try to use un-peeling epilogue when false, peeled epilouge o.w.">,
+    Option<"depth", "pipeline-depth", "int64_t",
+            /*default=*/"2",
+           "Number of stages ">,
+    Option<"scheduleIndex", "schedule-index", "int64_t",
+            /*default=*/"0",
+           "Allows picking different schedule for the pipelining transformation.">,
+    Option<"transformFileName", "transform-file-name", "std::string",
+            /*default=*/"\"\"",
+            "Optional filename containing a transform dialect specification to "
+            "apply. If left empty, the IR is assumed to contain one top-level "
+            "transform dialect operation somewhere in the module.">,
+  ];
+}
+
+//===----------------------------------------------------------------------===//
+// LoopInvariantCodeMotion
+//===----------------------------------------------------------------------===//
+def GPULoopInvariantCodeMotion : Pass<"gpu-loop-invariant-code-motion", "func::FuncOp"> {
+  let summary = "Move loop invariant code out of the loop.";
+}
+
+//===----------------------------------------------------------------------===//
+// OptimizeIntArithmetic
+//===----------------------------------------------------------------------===//
+def OptimizeIntArithmetic : Pass<"optimize-int-arithmetic", "func::FuncOp"> {
+  let summary = "Optimizes integer arithmetic using a variety of dataflow analysis and patterns.";
+  let options = [
+    Option<"narrowToI32", "narrow-to-i32", "bool",
+      /*default=*/"true",
+      "Flag indicating if computations that can be performed with 32 bits should be."
+      " Mainly used for GPU code generation to not waste registers.">
+  ];
+}
 #endif // BYTEIR_DIALECT_GPU_PASSES

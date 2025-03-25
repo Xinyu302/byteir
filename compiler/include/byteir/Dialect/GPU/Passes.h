@@ -27,6 +27,7 @@
 #include "byteir/Dialect/GPU/Transforms/LegalizeGPULaunch.h"
 #include "byteir/Dialect/GPU/Transforms/OptimizeVectorTransfer.h"
 #include "byteir/Dialect/GPU/Transforms/RemoveTrivialLoops.h"
+#include "byteir/Dialect/GPU/Transforms/GPUPipelining.h"
 #include "mlir/Pass/Pass.h"
 
 namespace mlir {

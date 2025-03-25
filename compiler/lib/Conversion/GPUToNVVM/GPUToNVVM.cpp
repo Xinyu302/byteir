@@ -294,6 +294,13 @@ bool compare_nvgpu_arch_lt(const std::string &lhs, const std::string &rhs) {
   return larch < rarch;
 }
 
+int64_t getMemRefAlignment(mlir::MemRefType memRefType,
+                           const mlir::DataLayout &dataLayout) {
+  // return dataLayout.getTypeABIAlignment(memRefType.getElementType());
+  // FIXME: use 16 as default alignment
+  return 16;
+}
+
 // Note: this pass is an externsion pass of upstream pass:
 // https://github.com/llvm/llvm-project/blob/main/mlir/lib/Conversion/GPUToNVVM/LowerGpuOpsToNVVMOps.cpp
 struct GPUToNVVMExtPass : public GPUToNVVMExtBase<GPUToNVVMExtPass> {
@@ -307,11 +314,24 @@ struct GPUToNVVMExtPass : public GPUToNVVMExtBase<GPUToNVVMExtPass> {
 
   void runOnOperation() override {
     gpu::GPUModuleOp m = getOperation();
+    DataLayout dataLayout =
+        DataLayout(cast<DataLayoutOpInterface>(m.getOperation()));
 
     // Request C wrapper emission.
     for (auto func : m.getOps<func::FuncOp>()) {
       func->setAttr(LLVM::LLVMDialect::getEmitCWrapperAttrName(),
                     UnitAttr::get(&getContext()));
+    }
+    SmallVector<SmallVector<int64_t>> alignments;
+    for (auto func : m.getOps<gpu::GPUFuncOp>()) {
+      SmallVector<int64_t> funcAlignments;
+      for (auto &&iter : llvm::enumerate(func.getArguments())) {
+        if (isa<mlir::MemRefType>(iter.value().getType())) {
+          auto memRefType = iter.value().getType().cast<mlir::MemRefType>();
+          funcAlignments.push_back(getMemRefAlignment(memRefType, dataLayout));
+        }
+      }
+      alignments.push_back(funcAlignments);
     }
 
     // Customize the bitwidth used for the device side index computations.
@@ -419,12 +439,18 @@ struct GPUToNVVMExtPass : public GPUToNVVMExtBase<GPUToNVVMExtPass> {
     if (failed(applyPartialConversion(m, target, frozenLLVMPatterns)))
       signalPassFailure();
 
+    int64_t num_funcs = 0;
     // TODO: retrieve attribute from memref arg when convert func to llvm
-    m.walk([&](LLVM::LLVMFuncOp func) {
+    m.walk<WalkOrder::PreOrder>([&](LLVM::LLVMFuncOp func) {
+      auto &funcAlignments = alignments[num_funcs++];
       for (auto &&iter : llvm::enumerate(func.getArguments())) {
         if (llvm::isa<LLVM::LLVMPointerType>(iter.value().getType())) {
           func.setArgAttr(iter.index(), LLVMDialect::getNoAliasAttrName(),
                           UnitAttr::get(m->getContext()));
+          func.setArgAttr(
+              iter.index(), LLVMDialect::getAlignAttrName(),
+              IntegerAttr::get(IntegerType::get(m->getContext(), 64),
+                               funcAlignments[iter.index()]));
         }
       }
     });
