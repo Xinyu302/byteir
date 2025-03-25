@@ -25,6 +25,7 @@
 #include "byteir/Dialect/mhlo/Passes.h"
 #include "byteir/Pipelines/Common/Utils.h"
 #include "mlir/Conversion/AffineToStandard/AffineToStandard.h"
+#include "mlir/Conversion/NVVMToLLVM/NVVMToLLVM.h"
 #include "mlir/Conversion/ReconcileUnrealizedCasts/ReconcileUnrealizedCasts.h"
 #include "mlir/Conversion/SCFToControlFlow/SCFToControlFlow.h"
 #include "mlir/Conversion/VectorToLLVM/ConvertVectorToLLVMPass.h"
@@ -59,6 +60,7 @@ void createNVVMCodegenPipelineImpl(OpPassManager &pm,
   pm.addPass(createCSEPass());
   pm.addPass(createReconcileUnrealizedCastsPass());
   addMultiCSEPipeline(pm, 3);
+  pm.addPass(createConvertNVVMToLLVMPass());
 }
 } // namespace
 
