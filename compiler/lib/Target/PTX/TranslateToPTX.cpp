@@ -51,7 +51,7 @@ extern "C" void LLVMInitializeNVPTXAsmPrinter();
 namespace {
 
 const char *nvptxTriple = "nvptx64-nvidia-cuda";
-const char *ptxFeatures = "+ptx64";
+const char *ptxFeatures = "+ptx76";
 
 static void findLibDeviceFile(std::string &libdeviceFile) {
   // Get the cuda installation path from CUDA_HOME environment. If it's not
