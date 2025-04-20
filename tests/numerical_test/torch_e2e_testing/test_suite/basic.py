@@ -44,8 +44,12 @@ class MatmulF16Module(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: MatmulF16Module())
 def MatmulF16Module_basic(module, tu: TestUtils):
-    module.forward(tu.rand(128, 32).to(torch.float16),
-                   tu.rand(32, 128).to(torch.float16))
+    import os
+    m = int(os.getenv('M', 1024))
+    n = int(os.getenv('N', 1024))
+    k = int(os.getenv('K', 1024))
+    module.forward(tu.rand(m, k).to(torch.float16),
+                   tu.rand(k, n).to(torch.float16))
 
 
 class BatchMatmulF16Module(torch.nn.Module):
@@ -154,8 +158,60 @@ class MatmulF16ReluModule(torch.nn.Module):
 
 @register_test_case(module_factory=lambda: MatmulF16ReluModule())
 def MatmulF16ReluModule_basic(module, tu: TestUtils):
-    module.forward(tu.rand(128, 256).to(torch.float16),
-                   tu.rand(256, 128).to(torch.float16))
+    M = 128
+    N = 256
+    K = 256
+    import os
+    M = int(os.getenv('M', M))
+    N = int(os.getenv('N', N))
+    K = int(os.getenv('K', K))
+    module.forward(tu.rand(M, K).to(torch.float16),
+                   tu.rand(K, N).to(torch.float16))
+
+
+class MatmulF16GeluModule(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, a, b):
+        matmul_result = torch.matmul(a, b)
+        # 使用多个算子组合近似GELU
+        cdf = 0.5 * (1.0 + torch.erf(matmul_result / torch.sqrt(torch.tensor(2.0))))
+        gelu_result = matmul_result * cdf
+        return gelu_result
+    
+@register_test_case(module_factory=lambda: MatmulF16GeluModule())
+def MatmulF16GeluModule_basic(module, tu: TestUtils):
+    M = 128
+    N = 256
+    K = 256
+    import os
+    M = int(os.getenv('M', M))
+    N = int(os.getenv('N', N))
+    K = int(os.getenv('K', K))
+    module.forward(tu.rand(M, K).to(torch.float16),
+                   tu.rand(K, N).to(torch.float16))
+
+
+class MatmulF16AddBiasF32Module(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, a, b, c):
+        return torch.matmul(a, b) + c
+    
+@register_test_case(module_factory=lambda: MatmulF16AddBiasF32Module())
+def MatmulF16AddBiasF32Module_basic(module, tu: TestUtils):
+    M = 128
+    N = 256
+    K = 256
+    import os
+    M = int(os.getenv('M', M))
+    N = int(os.getenv('N', N))
+    K = int(os.getenv('K', K))
+    module.forward(tu.rand(M, K).to(torch.float16),
+                   tu.rand(K, N).to(torch.float16),
+                   tu.rand(M, N).to(torch.float32))
 
 class BatchMatmulAddF32Module(torch.nn.Module):
 
