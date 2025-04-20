@@ -165,6 +165,26 @@ static linalg::LinalgPromotionOptions getPromotionOptionsForMatmulOperand() {
 
 template <int OPERAND>
 static LogicalResult promotionImpl(OpBuilder &builder, Operation *op) {
+  if constexpr (OPERAND == MatmulOperands::C) {
+    linalg::GenericOp genericOp = cast<linalg::GenericOp>(op);
+    auto c_buffer = genericOp.getDpsInitOperand(0);
+    // if c is an alloc
+
+    auto allocOp = dyn_cast<memref::AllocOp>(c_buffer->get().getDefiningOp());
+    if (allocOp) {
+      IRRewriter rewriter(allocOp);
+      // add gpu::AddressSpaceAttr
+      auto addressSpaceAttr = gpu::AddressSpaceAttr::get(
+          builder.getContext(), gpu::GPUDialect::getWorkgroupAddressSpace());
+      MemRefType memrefType = MemRefType::get(
+          allocOp.getType().getShape(), allocOp.getType().getElementType(),
+          MemRefLayoutAttrInterface{}, addressSpaceAttr);
+      auto newAllocOp = rewriter.create<memref::AllocOp>(
+          allocOp.getLoc(), memrefType, allocOp.getDynamicSizes());
+      rewriter.replaceOp(allocOp, newAllocOp.getResult());
+      return success();
+    }
+  }
   linalg::LinalgPromotionOptions promotionOptions =
       getPromotionOptionsForMatmulOperand<OPERAND>();
 
@@ -298,6 +318,8 @@ public:
       builder.setInsertionPoint(linalgContractOp); // before linalgContractOp
     (void)promotionImpl<MatmulOperands::C>(builder, linalgContractOp);
 
+    llvm::errs() << "funcOp: " << funcOp << "\n";
+
     // The linalg.copy should be fused with its consumer linalg.generic.
     // So first to find linalg.copy which has marker
     // "__byteir_store_matrix_c__"
@@ -308,7 +330,7 @@ public:
       }
     });
     SmallVector<Operation *> toDelete;
-    if (propagateCopySourceIntoConsumerGeneric(copyToGlobalOp, toDelete)) {
+    if (copyToGlobalOp && propagateCopySourceIntoConsumerGeneric(copyToGlobalOp, toDelete)) {
       toDelete.push_back(copyToGlobalOp);
       for (Operation *op : toDelete)
         op->erase();

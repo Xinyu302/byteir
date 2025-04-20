@@ -84,7 +84,10 @@ void addGemmOptPasses(OpPassManager &pm) {
       anchoredPM.addPass(createCSEPass());
       anchoredPM.addPass(memref::createFoldMemRefAliasOpsPass());
       // shared memory swizzle
-      anchoredPM.addPass(createGPUInputSharedMemorySwizzlePass());
+      char *swizzle = std::getenv("NO_SHARED_SWIZZLE");
+      if (!swizzle)
+        anchoredPM.addPass(createGPUInputSharedMemorySwizzlePass());
+      // anchoredPM.addPass(createGPUInputSharedMemorySwizzlePass());
       anchoredPM.addPass(createCanonicalizerPass());
       anchoredPM.addPass(createCSEPass());
       pm.addNestedPass<func::FuncOp>(
